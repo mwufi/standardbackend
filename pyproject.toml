@@ -1,0 +1,30 @@
+[project]
+name = "standardbackend"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Zen T", email = "ztang230@gmail.com" }
+]
+dependencies = [
+    "fastapi>=0.115.6",
+    "openai>=1.59.3",
+    "python-dotenv>=1.0.1",
+    "pydantic>=2.10.4",
+    "uvicorn>=0.34.0",
+]
+readme = "README.md"
+requires-python = ">= 3.8"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/standardbackend"]
