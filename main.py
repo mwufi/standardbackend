@@ -107,7 +107,7 @@ async def solve_math(request: CompletionRequest):
 async def create_audio_completion(request: CompletionRequest):
     try:
         completion = client.chat.completions.create(
-            model="gpt-4-audio-preview",
+            model="gpt-4o-audio-preview-2024-10-01",
             modalities=request.modalities or ["text", "audio"],
             audio=request.audio or {"voice": "alloy", "format": "wav"},
             messages=[
