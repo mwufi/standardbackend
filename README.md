@@ -1,3 +1,17 @@
+# Update(1/11) Agent library
+
+Aims to be the simplest way to build (and eventually deploy) cool agents!
+
+Run `zen.py` to see an example of a simple agent that can use tools and run python code.
+(you do have allow access to ~/Desktop for the agent to read files on Mac, google how to do this)
+
+You can sub in another directory if you don't want to do this.
+
+1. Create your ANTHROPIC_API_KEY in a .env file
+2. Run `rye sync`
+3. Run `python zen.py`
+
+
 # OpenAI GPT-4 Completion Service
 
 A FastAPI service that provides an endpoint for OpenAI GPT-4 completions.
