@@ -1,5 +1,15 @@
 from standardbackend.helpers.thread import Thread
 from standardbackend.utils import pretty_print_messages
+import logging
+
+# Configure logging to print to stdout with colors
+logging.basicConfig(
+    level=logging.INFO,
+    format="\033[36m%(asctime)s\033[0m - \033[32m%(name)s\033[0m - \033[1;33m%(levelname)s\033[0m - %(message)s",
+)
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 # # Chain of tool interactions
@@ -248,6 +258,11 @@ class GetCustomerOrdersInput(BaseModel):
 
 db = FakeDatabase()
 
+
+def fail_tool(input):
+    raise Exception("Not implemented")
+
+
 tools = [
     Tool(
         name="get_user",
@@ -275,11 +290,40 @@ tools = [
     ),
 ]
 
+from standardbackend.tools.python_code_runner import python_tool
+from pathlib import Path
+import os
+
+
+class GetDesktopFilesInput(BaseModel):
+    pass
+
+
+def get_desktop_files():
+    desktop_path = os.path.join(Path.home(), "Desktop")
+    try:
+        files = os.listdir(desktop_path)
+        return {"files": files, "path": desktop_path}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+tools.append(
+    Tool(
+        name="get_desktop_files",
+        description="Get a list of all files on the user's desktop",
+        input_schema=GetDesktopFilesInput,
+        execute=lambda input: get_desktop_files(),
+    )
+)
+
+# also make it able to run python scripts
+tools.append(python_tool)
+
 t = Thread(
     tools=tools,
-    on_tool_use_callback=lambda block: print(
-        "== Claude wants to use the {} tool ==".format(block.name)
-    ),
 )
-messages = t.send_message("Can you look up my orders? My email is john@gmail.com")
+messages = t.send_message(
+    "Can you get the files on my desktop? make a graph of how many of each type i have"
+)
 pretty_print_messages(messages)

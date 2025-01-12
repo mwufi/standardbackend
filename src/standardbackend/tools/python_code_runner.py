@@ -77,3 +77,10 @@ tools: List[Tool] = [
         execute=execute_python_code,
     )
 ]
+
+python_tool = Tool(
+    name="run_python_code",
+    description="Run Python code with configurable timeout and output limits",
+    input_schema=EvalInput,
+    execute=execute_python_code,
+)
