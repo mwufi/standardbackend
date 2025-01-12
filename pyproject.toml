@@ -11,6 +11,11 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "pydantic>=2.10.4",
     "uvicorn>=0.34.0",
+    "ipykernel>=6.29.5",
+    "anthropic>=0.42.0",
+    "mainframe-orchestra>=0.0.14",
+    "elevenlabs>=1.50.3",
+    "pygame>=2.6.1",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
