@@ -291,6 +291,7 @@ tools = [
 ]
 
 from standardbackend.tools.python_code_runner import python_tool
+from standardbackend.llm import ClaudeModels
 from pathlib import Path
 import os
 
@@ -320,10 +321,22 @@ tools.append(
 # also make it able to run python scripts
 tools.append(python_tool)
 
-t = Thread(
-    tools=tools,
-)
-messages = t.send_message(
-    "hey so i have a warp drive that can accelerate to 2x the speed of sound. what would be its kinetic energy if it weighted 10kg? use python"
-)
-pretty_print_messages(messages)
+# t = Thread(
+#     tools=tools,
+#     model=ClaudeModels.Sonnet,
+# )
+# messages = t.send_message("hey, what model are you?")
+# # messages = t.send_message(
+# #     "hey so i have a warp drive that can accelerate to 2x the speed of sound. what would be its kinetic energy if it weighted 10kg? use python"
+# # )
+# pretty_print_messages(messages)
+
+# Example usage of Terminal
+if __name__ == "__main__":
+    from standardbackend.terminal import Terminal
+
+    # Create a terminal with the tools we defined
+    terminal = Terminal(tools=tools)
+
+    # Start the interactive session
+    terminal.start()
