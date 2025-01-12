@@ -324,6 +324,6 @@ t = Thread(
     tools=tools,
 )
 messages = t.send_message(
-    "Can you get the files on my desktop? make a graph of how many of each type i have"
+    "hey so i have a warp drive that can accelerate to 2x the speed of sound. what would be its kinetic energy if it weighted 10kg? use python"
 )
 pretty_print_messages(messages)
