@@ -13,6 +13,15 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _default_tool_use_callback(block):
+    print(f"[tool_use] {block.name} {block.id}")
+    print("=> ", block.input)
+
+
+def _default_text_callback(block):
+    print(block.text)
+
+
 class Thread:
     """Represents a conversation thread with Claude that can use tools"""
 
@@ -46,29 +55,61 @@ class Thread:
 
         def handle_text_output(block):
             if self.on_text_callback == "default":
-                print(block.text)
+                _default_text_callback(block)
             elif self.on_text_callback is not None:
-                self.on_text_callback(block.text)
+                self.on_text_callback(block)
 
         def handle_tool_use(block):
             logger.info(f"Tool called: {block.name} (ID: {block.id})")
             logger.debug(f"Tool input: {block.input}")
 
             if self.on_tool_use_callback == "default":
-                print(f"[tool_use] {block.name} {block.id}")
-                print("=> ", block.input)
+                _default_tool_use_callback(block)
             elif self.on_tool_use_callback is not None:
                 self.on_tool_use_callback(block)
 
-            # Schedule execution - right now it executes immediately
-            ans = self.tool_cache.request_execution(block.id, block.name, block.input)
+            try:
+                # Schedule execution - right now it executes immediately
+                ans = self.tool_cache.request_execution(
+                    block.id, block.name, block.input
+                )
 
-            # Get the result!
-            ans = self.tool_cache.get(block.id)
+                # Get the result!
+                ans = self.tool_cache.get(block.id)
 
-            if ans.status == ExecutionStatus.COMPLETED:
-                logger.info(f"Tool {block.id} completed successfully")
-                logger.debug(f"Tool result: {ans.result}")
+                if ans.status == ExecutionStatus.COMPLETED:
+                    logger.info(f"Tool {block.id} completed successfully")
+                    logger.debug(f"Tool result: {ans.result}")
+                    tool_responses.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": ans.result,
+                                }
+                            ],
+                        }
+                    )
+                else:
+                    error_msg = f"Tool {block.id} failed with error: {ans.error}"
+                    logger.error(error_msg)
+                    tool_responses.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": f"Error: {ans.error}",
+                                }
+                            ],
+                        }
+                    )
+            except Exception as e:
+                error_msg = f"Tool {block.id} failed with unexpected error: {str(e)}"
+                logger.error(error_msg)
                 tool_responses.append(
                     {
                         "role": "user",
@@ -76,16 +117,11 @@ class Thread:
                             {
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
-                                "content": ans.result,
+                                "content": f"Error: {str(e)}",
                             }
                         ],
                     }
                 )
-            else:
-                logger.error(f"Tool {block.id} failed with error: {ans.error}")
-                print(f"Tool {block.id} failed with error: {ans.error}")
-
-            print(f"[tool_answer] {ans.result}")
 
         for block in message.content:
             content_type = block.type
@@ -145,6 +181,3 @@ class Thread:
             self.messages.extend(tool_responses)
 
         return self.messages
-
-
-# Example usage:

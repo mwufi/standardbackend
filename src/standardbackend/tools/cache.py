@@ -28,13 +28,19 @@ class ToolCache:
 
     def __init__(self, tools: List[Tool]):
         self.cache: Dict[str, ExecutionResult] = {}
-        self.tools = tools
+        self.tools = tools or []
         self.tool_name_to_tool = {tool.name: tool for tool in tools}
         self.tool_specs = [tool.to_dict() for tool in tools]
 
     def get(self, execution_id: str) -> Optional[ExecutionResult]:
         """Get the result of a tool execution by ID"""
-        return self.cache.get(execution_id)
+        ans = self.cache.get(execution_id)
+
+        # for now, make sure the result is a string!
+        if ans and ans.result:
+            ans.result = str(ans.result)
+
+        return ans
 
     def _lookup_tool(self, tool_name: str) -> Tool:
         """Lookup a tool by name"""
