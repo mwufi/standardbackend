@@ -22,17 +22,20 @@ class Thread:
         temperature=0.2,
         max_tokens=1200,
         tools=None,
+        agent=None,
         on_text_callback=None,
         on_tool_use_callback=None,
     ):
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self.tool_cache = ToolCache(tools)
+        self.tool_cache = ToolCache(tools) if tools else None
         self.messages = []
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.on_text_callback = on_text_callback
         self.on_tool_use_callback = on_tool_use_callback
+        self.tools = tools
+        self.agent = agent
 
     def _handle_text_output(self, block):
         """Handle text output from Claude with optional callback"""
@@ -112,15 +115,37 @@ class Thread:
         self.add_message("user", message)
 
         while True:
-            claude_message = self.client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                tools=self.tool_cache.tool_specs,
-                tool_choice={"type": tool_mode},
-                messages=self.messages,
+            tool_args = (
+                {
+                    "tools": self.tool_cache.tool_specs,
+                    "tool_choice": {"type": tool_mode},
+                }
+                if self.tools
+                else {}
             )
 
+            model_args = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+
+            system_prompt = (
+                {
+                    "system": self.agent.get_current_context(),
+                }
+                if self.agent
+                else {}
+            )
+
+            message_args = {
+                "messages": self.messages,
+                **model_args,
+                **tool_args,
+                **system_prompt,
+            }
+
+            claude_message = self.client.messages.create(**message_args)
             metadata, tool_responses = self._parse_message(claude_message)
             self.add_message("assistant", claude_message.content)
             self.messages.extend(tool_responses)
