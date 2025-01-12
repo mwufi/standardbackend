@@ -1,21 +1,43 @@
 from anthropic import Anthropic
 import os
+import logging
 from standardbackend.tools import ExecutionStatus, ToolCache
 from standardbackend.tools.python_code_runner import tools as python_tools
+
+from dotenv import load_dotenv
+
+# Just load the .env file by default
+load_dotenv()
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class Thread:
     """Represents a conversation thread with Claude that can use tools"""
 
     def __init__(
-        self, model="claude-3-haiku-20240307", temperature=0.2, max_tokens=1200
+        self,
+        model="claude-3-haiku-20240307",
+        temperature=0.2,
+        max_tokens=1200,
+        tools=None,
+        on_text_callback=None,
+        on_tool_use_callback=None,
     ):
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self.tool_cache = ToolCache(python_tools)
+        self.tool_cache = ToolCache(tools)
         self.messages = []
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+
+        # optional callbacks
+        # "default" - print to console
+        # None - no callback
+        # function - call the function
+        self.on_text_callback = on_text_callback
+        self.on_tool_use_callback = on_tool_use_callback
 
     def _parse_message(self, message):
         """Parse Claude's message and handle any tool calls"""
@@ -23,11 +45,20 @@ class Thread:
         tool_responses = []
 
         def handle_text_output(block):
-            print(block.text)
+            if self.on_text_callback == "default":
+                print(block.text)
+            elif self.on_text_callback is not None:
+                self.on_text_callback(block.text)
 
         def handle_tool_use(block):
-            print(f"[tool_use] {block.name} {block.id}")
-            print("=> ", block.input)
+            logger.info(f"Tool called: {block.name} (ID: {block.id})")
+            logger.debug(f"Tool input: {block.input}")
+
+            if self.on_tool_use_callback == "default":
+                print(f"[tool_use] {block.name} {block.id}")
+                print("=> ", block.input)
+            elif self.on_tool_use_callback is not None:
+                self.on_tool_use_callback(block)
 
             # Schedule execution - right now it executes immediately
             ans = self.tool_cache.request_execution(block.id, block.name, block.input)
@@ -36,6 +67,8 @@ class Thread:
             ans = self.tool_cache.get(block.id)
 
             if ans.status == ExecutionStatus.COMPLETED:
+                logger.info(f"Tool {block.id} completed successfully")
+                logger.debug(f"Tool result: {ans.result}")
                 tool_responses.append(
                     {
                         "role": "user",
@@ -49,6 +82,7 @@ class Thread:
                     }
                 )
             else:
+                logger.error(f"Tool {block.id} failed with error: {ans.error}")
                 print(f"Tool {block.id} failed with error: {ans.error}")
 
             print(f"[tool_answer] {ans.result}")
@@ -69,8 +103,15 @@ class Thread:
         """Add a message to the conversation"""
         self.messages.append({"role": role, "content": content})
 
-    def send_message(self, message: str) -> list:
-        """Send a message to Claude and handle the response"""
+    def send_message(self, message: str, tool_mode: str = "auto") -> list:
+        """Send a message to Claude and handle the response
+
+        Args:
+            message: The message to send to Claude
+            tool_mode: One of "auto", "any", or "tool". Controls how Claude uses tools:
+                - "auto": Claude decides whether to use tools (default)
+                - "any": Claude must use one of the provided tools
+        """
         self.add_message("user", message)
 
         claude_message = self.client.messages.create(
@@ -78,15 +119,30 @@ class Thread:
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             tools=self.tool_cache.tool_specs,
-            tool_choice={"type": "auto"},
+            tool_choice={"type": tool_mode},
             messages=self.messages,
         )
 
         metadata, tool_responses = self._parse_message(claude_message)
 
         # Add Claude's response and any tool responses to the conversation
-        self.messages.append(claude_message)
+        self.messages.append({"role": "assistant", "content": claude_message.content})
         self.messages.extend(tool_responses)
+
+        while claude_message.stop_reason == "tool_use":
+            claude_message = self.client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                tools=self.tool_cache.tool_specs,
+                tool_choice={"type": "auto"},
+                messages=self.messages,
+            )
+            metadata, tool_responses = self._parse_message(claude_message)
+            self.messages.append(
+                {"role": "assistant", "content": claude_message.content}
+            )
+            self.messages.extend(tool_responses)
 
         return self.messages
 
