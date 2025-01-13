@@ -260,6 +260,8 @@ soupsieve==2.6
     # via beautifulsoup4
 spinners==0.0.24
     # via halo
+sqlalchemy==2.0.37
+    # via standardbackend
 stack-data==0.6.3
     # via ipython
 starlette==0.41.3
@@ -301,6 +303,7 @@ typing-extensions==4.12.2
     # via pinecone
     # via pydantic
     # via pydantic-core
+    # via sqlalchemy
 tzdata==2024.2
     # via mainframe-orchestra
 uritemplate==4.1.1

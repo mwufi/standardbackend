@@ -99,6 +99,13 @@ class Thread:
 
         return metadata, tool_responses
 
+    def _blocks_to_dict(self, blocks):
+        """Converts TextBlock and ToolUseBlock to dicts"""
+        t = []
+        for block in blocks:
+            t.append(block.to_dict())
+        return t
+
     def add_message(self, role: str, content: str):
         """Add a message to the conversation"""
         self.messages.append({"role": role, "content": content})
@@ -147,7 +154,7 @@ class Thread:
 
             claude_message = self.client.messages.create(**message_args)
             metadata, tool_responses = self._parse_message(claude_message)
-            self.add_message("assistant", claude_message.content)
+            self.add_message("assistant", self._blocks_to_dict(claude_message.content))
             self.messages.extend(tool_responses)
 
             if claude_message.stop_reason != "tool_use":

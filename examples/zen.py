@@ -331,12 +331,12 @@ tools.append(python_tool)
 # # )
 # pretty_print_messages(messages)
 
-# Example usage of Terminal
-if __name__ == "__main__":
-    from standardbackend.terminal import Terminal
+# # Example usage of Terminal
+# if __name__ == "__main__":
+#     from standardbackend.terminal import Terminal
 
-    # Create a terminal with the tools we defined
-    terminal = Terminal(tools=tools)
+#     # Create a terminal with the tools we defined
+#     terminal = Terminal(tools=tools)
 
-    # Start the interactive session
-    terminal.start()
+#     # Start the interactive session
+#     terminal.start()

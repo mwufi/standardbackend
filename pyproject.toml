@@ -16,6 +16,7 @@ dependencies = [
     "mainframe-orchestra>=0.0.14",
     "elevenlabs>=1.50.3",
     "pygame>=2.6.1",
+    "sqlalchemy>=2.0.37",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
