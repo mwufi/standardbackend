@@ -1,8 +1,10 @@
-from anthropic import Anthropic
+from anthropic import Anthropic, AsyncAnthropic
 import os
 import logging
 from standardbackend.tools import ExecutionStatus, ToolCache
 from standardbackend.tools.python_code_runner import tools as python_tools
+import asyncio
+from typing import AsyncGenerator, Union, Dict, Any
 
 from dotenv import load_dotenv
 
@@ -162,3 +164,71 @@ class Thread:
             tool_mode = "auto"  # Switch to auto mode for follow-up messages
 
         return self.messages
+
+    async def send_message_stream(self, message: str, tool_mode: str = "auto") -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
+        """Send a message to Claude and stream the response with tool handling
+
+        Args:
+            message: The message to send to Claude
+            tool_mode: One of "auto", "any", or "tool". Controls how Claude uses tools:
+                - "auto": Claude decides whether to use tools (default)
+                - "any": Claude must use one of the provided tools
+
+        Yields:
+            Either a string chunk of text from Claude or a dictionary containing tool results
+        """
+        self.add_message("user", message)
+
+        while True:
+            tool_args = (
+                {
+                    "tools": self.tool_cache.tool_specs,
+                    "tool_choice": {"type": tool_mode},
+                }
+                if self.tools
+                else {}
+            )
+
+            model_args = {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+
+            system_prompt = (
+                {
+                    "system": self.agent.get_current_context(),
+                }
+                if self.agent
+                else {}
+            )
+
+            message_args = {
+                "messages": self.messages,
+                **model_args,
+                **tool_args,
+                **system_prompt,
+            }
+
+            async with self.client.messages.stream(**message_args) as stream:
+                message_content = []
+                async for message_delta in stream:
+                    for block in message_delta.content:
+                        if block.type == "text":
+                            if self.on_text_callback is not None:
+                                self.on_text_callback(block)
+                            yield block.text
+                            message_content.append(block)
+                        elif block.type == "tool_use":
+                            if self.on_tool_use_callback is not None:
+                                self.on_tool_use_callback(block)
+                            tool_response = self._execute_tool(block)
+                            yield {"tool_result": tool_response}
+                            self.messages.append(tool_response)
+                            message_content.append(block)
+
+                self.add_message("assistant", message_content)
+
+                if stream.stop_reason != "tool_use":
+                    break
+                tool_mode = "auto"  # Switch to auto mode for follow-up messages
