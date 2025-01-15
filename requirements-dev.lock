@@ -20,6 +20,7 @@ anyio==4.7.0
     # via groq
     # via httpx
     # via openai
+    # via sse-starlette
     # via starlette
 appnope==0.1.4
     # via ipykernel
@@ -229,6 +230,8 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
     # via mainframe-orchestra
     # via standardbackend
+python-multipart==0.0.20
+    # via standardbackend
 pyyaml==6.0.2
     # via huggingface-hub
     # via mainframe-orchestra
@@ -262,10 +265,13 @@ spinners==0.0.24
     # via halo
 sqlalchemy==2.0.37
     # via standardbackend
+sse-starlette==2.2.1
+    # via standardbackend
 stack-data==0.6.3
     # via ipython
 starlette==0.41.3
     # via fastapi
+    # via sse-starlette
 termcolor==2.5.0
     # via halo
 texttable==1.7.0
