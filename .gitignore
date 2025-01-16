@@ -12,3 +12,6 @@ wheels/
 .venv
 
 *.spec.md
+
+
+*.db
