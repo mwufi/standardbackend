@@ -22,7 +22,7 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, chat_id: str):
-        await websocket.accept()
+        """Add a websocket connection to a chat room"""
         if chat_id not in self.active_connections:
             self.active_connections[chat_id] = set()
         self.active_connections[chat_id].add(websocket)
@@ -33,18 +33,32 @@ class ConnectionManager:
         })
 
     def disconnect(self, websocket: WebSocket, chat_id: str):
+        """Remove a websocket connection from a chat room"""
         if chat_id in self.active_connections:
             self.active_connections[chat_id].discard(websocket)
             if not self.active_connections[chat_id]:
                 del self.active_connections[chat_id]
 
+    async def switch_room(self, websocket: WebSocket, old_chat_id: str | None, new_chat_id: str):
+        """Switch a websocket connection from one chat room to another"""
+        if old_chat_id:
+            self.disconnect(websocket, old_chat_id)
+            await self.broadcast_json(old_chat_id, {
+                "type": "disconnect",
+                "chat_id": old_chat_id,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        
+        await self.connect(websocket, new_chat_id)
+
     async def broadcast_json(self, chat_id: str, message: dict):
+        """Broadcast a message to all connections in a chat room"""
         if chat_id in self.active_connections:
             dead_connections = set()
             for connection in self.active_connections[chat_id]:
                 try:
                     await connection.send_json(message)
-                except (RuntimeError, WebSocketDisconnect):
+                except RuntimeError:
                     dead_connections.add(connection)
             
             # Clean up dead connections
@@ -182,15 +196,17 @@ async def push_message(chat_id: str, request: Request):
         media_type="text/event-stream"
     ) 
 
-@app.websocket("/v2/chat/{chat_id}")
-async def websocket_endpoint(websocket: WebSocket, chat_id: str):
-    async with websocket_error_handler(websocket, chat_id, manager):
-        await manager.connect(websocket, chat_id)
-        
+@app.websocket("/v2/chat")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()  # Accept the connection once at the start
+    chat_id = None
+    
+    try:
         # Set up tool callback
         async def tool_callback(event: dict):
             try:
-                await manager.broadcast_json(chat_id, event)
+                if chat_id:
+                    await manager.broadcast_json(chat_id, event)
             except RuntimeError:
                 pass  # Connection already closed
         
@@ -201,13 +217,28 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                 data = await websocket.receive_json()
                 if isinstance(data, str):
                     data = json.loads(data)
-            except WebSocketDisconnect:
-                break
-            except json.JSONDecodeError:
-                await manager.broadcast_error(chat_id, "Invalid JSON message received")
-                continue
-            
-            try:
+                
+                # Get chat_id from the message
+                new_chat_id = data.get("chat_id")
+                if not new_chat_id:
+                    await websocket.send_json({
+                        "type": "error",
+                        "error": "No chat_id provided",
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                    continue
+                
+                # Handle chat switching
+                if data.get("type") == "switch_chat":
+                    await manager.switch_room(websocket, chat_id, new_chat_id)
+                    chat_id = new_chat_id
+                    continue
+                
+                # Ensure chat_id matches current chat
+                if new_chat_id != chat_id:
+                    await manager.switch_room(websocket, chat_id, new_chat_id)
+                    chat_id = new_chat_id
+
                 if data.get("type") == "convo-reset":
                     # Clear conversation in DB
                     db.clear(chat_id)
@@ -285,14 +316,31 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                         "agent_id": "assistant", 
                         "timestamp": datetime.utcnow().isoformat()
                     })
+            except WebSocketDisconnect:
+                if chat_id:
+                    manager.disconnect(websocket, chat_id)
+                break
+            except json.JSONDecodeError:
+                await websocket.send_json({
+                    "type": "error",
+                    "error": "Invalid JSON message received",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                continue
             except Exception as e:
                 error_details = traceback.format_exc()
                 print(f"Error processing message: {str(e)}\n{error_details}")
-                await manager.broadcast_error(
-                    chat_id,
-                    f"Error processing message: {str(e)}",
-                    error_details if app.debug else None
-                ) 
+                if chat_id:
+                    await manager.broadcast_error(
+                        chat_id,
+                        f"Error processing message: {str(e)}",
+                        error_details if app.debug else None
+                    )
+    except Exception as e:
+        error_details = traceback.format_exc()
+        print(f"WebSocket error: {str(e)}\n{error_details}")
+        if chat_id:
+            manager.disconnect(websocket, chat_id)
 
 @app.get("/chats")
 async def get_all_chats():
