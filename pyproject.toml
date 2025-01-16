@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy>=2.0.37",
     "sse-starlette>=2.2.1",
     "python-multipart>=0.0.20",
+    "pydantic-settings>=2.7.1",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"

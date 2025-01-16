@@ -213,11 +213,14 @@ pydantic==2.10.4
     # via mainframe-orchestra
     # via ollama
     # via openai
+    # via pydantic-settings
     # via standardbackend
 pydantic-core==2.27.2
     # via cohere
     # via elevenlabs
     # via pydantic
+pydantic-settings==2.7.1
+    # via standardbackend
 pygame==2.6.1
     # via standardbackend
 pygments==2.19.1
@@ -229,6 +232,7 @@ python-dateutil==2.9.0.post0
     # via pinecone
 python-dotenv==1.0.1
     # via mainframe-orchestra
+    # via pydantic-settings
     # via standardbackend
 python-multipart==0.0.20
     # via standardbackend
