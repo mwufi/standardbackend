@@ -293,3 +293,38 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                     f"Error processing message: {str(e)}",
                     error_details if app.debug else None
                 ) 
+
+@app.get("/chats")
+async def get_all_chats():
+    """Get all conversations with their latest message."""
+    with db.get_connection() as conn:
+        c = conn.cursor()
+        
+        # Get all conversations with their latest message
+        c.execute('''
+            SELECT 
+                c.id, 
+                c.started_at as "started_at [timestamp]",
+                c.last_message_at as "last_message_at [timestamp]",
+                c.total_messages,
+                m.content as latest_message
+            FROM conversations c
+            LEFT JOIN messages m ON m.conversation_id = c.id
+            WHERE m.id = (
+                SELECT id FROM messages 
+                WHERE conversation_id = c.id 
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            )
+            ORDER BY c.last_message_at DESC
+        ''')
+        
+        chats = [{
+            'id': row[0],
+            'started_at': row[1].isoformat() if row[1] else None,
+            'last_message_at': row[2].isoformat() if row[2] else None,
+            'total_messages': row[3],
+            'latest_message': row[4] or ''
+        } for row in c.fetchall()]
+        
+        return chats 
