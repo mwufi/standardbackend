@@ -3,7 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 from datetime import datetime
 import json
-from typing import Dict, Set
+from typing import Dict, Set, Callable, Any
+import traceback
+import asyncio
+from contextlib import asynccontextmanager
 
 from .config import get_settings
 from .database.db import Database
@@ -50,7 +53,47 @@ class ConnectionManager:
             if not self.active_connections[chat_id]:
                 del self.active_connections[chat_id]
 
+    async def broadcast_error(self, chat_id: str, error: str, details: str = None):
+        """Broadcast an error message to all clients in a chat room"""
+        await self.broadcast_json(chat_id, {
+            "type": "error",
+            "error": error,
+            "details": details,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+@asynccontextmanager
+async def websocket_error_handler(websocket: WebSocket, chat_id: str, manager: ConnectionManager):
+    """Context manager for handling WebSocket errors"""
+    try:
+        yield
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, chat_id)
+        await manager.broadcast_json(chat_id, {
+            "type": "disconnect",
+            "chat_id": chat_id,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        # Get the full traceback
+        error_details = traceback.format_exc()
+        print(f"WebSocket Error: {str(e)}\n{error_details}")
+        
+        try:
+            # Try to notify clients of the error
+            await manager.broadcast_error(
+                chat_id,
+                str(e),
+                error_details if app.debug else None
+            )
+        except:
+            pass  # If error broadcasting fails, we don't want to crash
+        finally:
+            # Always ensure we disconnect on error
+            manager.disconnect(websocket, chat_id)
+
 app = FastAPI()
+app.debug = True  # Set to False in production
 settings = get_settings()
 db = Database(settings.database_url)
 llm = AnthropicLLM(model=settings.llm_model)
@@ -141,18 +184,18 @@ async def push_message(chat_id: str, request: Request):
 
 @app.websocket("/v2/chat/{chat_id}")
 async def websocket_endpoint(websocket: WebSocket, chat_id: str):
-    await manager.connect(websocket, chat_id)
-    
-    # Set up tool callback
-    async def tool_callback(event: dict):
-        try:
-            await manager.broadcast_json(chat_id, event)
-        except RuntimeError:
-            pass  # Connection already closed
-    
-    llm.set_tool_callback(tool_callback)
-    
-    try:
+    async with websocket_error_handler(websocket, chat_id, manager):
+        await manager.connect(websocket, chat_id)
+        
+        # Set up tool callback
+        async def tool_callback(event: dict):
+            try:
+                await manager.broadcast_json(chat_id, event)
+            except RuntimeError:
+                pass  # Connection already closed
+        
+        llm.set_tool_callback(tool_callback)
+        
         while True:
             try:
                 data = await websocket.receive_json()
@@ -161,72 +204,62 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
             except WebSocketDisconnect:
                 break
             except json.JSONDecodeError:
-                continue  # Skip invalid JSON messages
-                
-            if data.get("type") == "convo-reset":
-                # Clear conversation in DB
-                conversation = Conversation(
-                    id=chat_id,
-                    started_at=datetime.utcnow(),
-                    total_messages=0
-                )
-                db.save_conversation(conversation)
-                
-                # Notify all clients
-                try:
+                await manager.broadcast_error(chat_id, "Invalid JSON message received")
+                continue
+            
+            try:
+                if data.get("type") == "convo-reset":
+                    # Clear conversation in DB
+                    db.clear(chat_id)
+                    
                     await manager.broadcast_json(chat_id, {
                         "type": "convo-reset",
                         "chat_id": chat_id,
                         "timestamp": datetime.utcnow().isoformat()
                     })
-                except RuntimeError:
-                    break  # Connection closed
-                
-            elif data.get("type") == "message":
-                user_message = data.get("content", "")
-                conversation = db.load_conversation(chat_id)
-                if not conversation:
-                    conversation = Conversation(
-                        id=chat_id,
-                        started_at=datetime.utcnow(),
-                        total_messages=0
-                    )
-                
-                # Send agent joined event
-                try:
+                    
+                elif data.get("type") == "message":
+                    user_message = data.get("content", "")
+                    if not user_message.strip():
+                        await manager.broadcast_error(chat_id, "Empty message received")
+                        continue
+
+                    conversation = db.load_conversation(chat_id)
+                    if not conversation:
+                        conversation = Conversation(
+                            id=chat_id,
+                            started_at=datetime.utcnow(),
+                            total_messages=0
+                        )
+                    
+                    # Send agent joined event
                     await manager.broadcast_json(chat_id, {
                         "type": "agent_joined",
                         "agent_id": "assistant",
                         "timestamp": datetime.utcnow().isoformat()
                     })
-                except RuntimeError:
-                    break  # Connection closed
-                
-                message = Message(
-                    role="user",
-                    content=user_message,
-                    timestamp=datetime.utcnow()
-                )
-                conversation.messages.append(message)
-                conversation.total_messages += 1
-                conversation.last_message_at = datetime.utcnow()
-                db.save_conversation(conversation, message)
+                    
+                    message = Message(
+                        role="user",
+                        content=user_message,
+                        timestamp=datetime.utcnow()
+                    )
+                    conversation.messages.append(message)
+                    conversation.total_messages += 1
+                    conversation.last_message_at = datetime.utcnow()
+                    db.save_conversation(conversation, message)
 
-                # Send message received confirmation
-                try:
+                    # Send message received confirmation
                     await manager.broadcast_json(chat_id, {
                         "type": "message_received",
                         "content": user_message,
                         "timestamp": datetime.utcnow().isoformat()
                     })
-                except RuntimeError:
-                    break  # Connection closed
 
-                # Stream the response
-                complete_response = ""
-                messages_for_llm = [{"role": m.role, "content": m.content} for m in conversation.messages]
-                
-                try:
+                    # Stream the response
+                    complete_response = ""
+                    messages_for_llm = [{"role": m.role, "content": m.content} for m in conversation.messages]
+                    
                     async for chunk in llm.stream_chat(messages_for_llm):
                         complete_response += chunk
                         await manager.broadcast_json(chat_id, {
@@ -234,39 +267,29 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                             "delta": chunk,
                             "timestamp": datetime.utcnow().isoformat()
                         })
-                except RuntimeError:
-                    break  # Connection closed
 
-                # Save the assistant's message
-                message = Message(
-                    role="assistant",
-                    content=complete_response,
-                    timestamp=datetime.utcnow()
-                )
-                conversation.messages.append(message)
-                conversation.total_messages += 1
-                conversation.last_message_at = datetime.utcnow()
-                db.save_conversation(conversation, message)
-                
-                # Send agent left event
-                try:
+                    # Save the assistant's message
+                    message = Message(
+                        role="assistant",
+                        content=complete_response,
+                        timestamp=datetime.utcnow()
+                    )
+                    conversation.messages.append(message)
+                    conversation.total_messages += 1
+                    conversation.last_message_at = datetime.utcnow()
+                    db.save_conversation(conversation, message)
+                    
+                    # Send agent left event
                     await manager.broadcast_json(chat_id, {
                         "type": "agent_left",
                         "agent_id": "assistant", 
                         "timestamp": datetime.utcnow().isoformat()
                     })
-                except RuntimeError:
-                    break  # Connection closed
-
-    except WebSocketDisconnect:
-        pass
-    finally:
-        manager.disconnect(websocket, chat_id)
-        try:
-            await manager.broadcast_json(chat_id, {
-                "type": "disconnect",
-                "chat_id": chat_id,
-                "timestamp": datetime.utcnow().isoformat()
-            })
-        except RuntimeError:
-            pass  # Connection already closed 
+            except Exception as e:
+                error_details = traceback.format_exc()
+                print(f"Error processing message: {str(e)}\n{error_details}")
+                await manager.broadcast_error(
+                    chat_id,
+                    f"Error processing message: {str(e)}",
+                    error_details if app.debug else None
+                ) 

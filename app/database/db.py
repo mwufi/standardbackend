@@ -108,3 +108,21 @@ class Database:
                 total_messages=conv_row[3],
                 messages=messages
             ) 
+
+    def clear(self, chat_id: str):
+        """Delete all messages for a given conversation ID."""
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            
+            # Delete all messages for this conversation
+            c.execute('DELETE FROM messages WHERE conversation_id = ?', (chat_id,))
+            
+            # Reset the total_messages count
+            c.execute('''
+                UPDATE conversations 
+                SET total_messages = 0,
+                    last_message_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (chat_id,))
+            
+            conn.commit() 
