@@ -9,6 +9,9 @@ class Agent:
     def get_messages(self):
         return self.current_convo
 
+    def clear_messages(self):
+        self.current_convo = []
+
     def set_system_prompt(self, prompt):
         self.system_prompt = prompt
 
