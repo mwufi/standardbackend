@@ -52,7 +52,6 @@ class ConnectionManager:
         """Handle incoming WebSocket messages"""
         try:
             message = json.loads(message_data)
-            print(message, message_data)
             if not isinstance(message, dict) or "type" not in message:
                 await websocket.send_json(
                     {
@@ -67,7 +66,7 @@ class ConnectionManager:
 
             if handler:
                 response = await handler(message.get("data"), websocket)
-                print("->".rjust(19), response)
+                print("\033[92m" + "->", response, "\033[0m")
                 if response:
                     await websocket.send_json(response)
             else:
@@ -137,9 +136,31 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
+from app.agent import Agent
+from app.llm import AnthropicLLM
+
+g = Agent()
+llm = AnthropicLLM()
+
+
 # Example of how to register handlers:
 async def handle_user_message(data: Any, websocket: WebSocket):
-    return {"type": "user_message_response", "data": f"Received user message: {data}"}
+    g.add_message(data)
+    complete_response = ""
+    async for chunk in llm.stream_chat(g.build_messages()):
+        if chunk.type == "text":
+            complete_response += chunk.content
+            await websocket.send_json(
+                {
+                    "type": "text_delta",
+                    "delta": chunk.content,
+                }
+            )
+        elif chunk.type == "tool_use":
+            print(chunk)
+
+    g.add_message(complete_response, role="assistant")
+    return None
 
 
 async def handle_a(data: Any, websocket: WebSocket):
