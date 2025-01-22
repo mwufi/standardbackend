@@ -36,6 +36,7 @@ class AnthropicLLM:
 
     async def stream_chat(
         self,
+        system_prompt: str,
         messages: List[Dict[str, str]],
         max_tokens: int = 4096,
         temperature: float = 0.7,
@@ -96,6 +97,7 @@ class AnthropicLLM:
         async with self.client.messages.stream(
             max_tokens=max_tokens,
             messages=messages,
+            system=system_prompt,
             model=self.model,
             temperature=temperature,
             tools=self.tool_cache.tool_specs,
