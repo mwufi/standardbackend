@@ -111,8 +111,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# tools
+from standardbackend.tools.base import Tool
+from pydantic import BaseModel
+
+
+class WeatherInput(BaseModel):
+    location: str
+
+    @staticmethod
+    def execute(data):
+        print("executing tool", data)
+        return "the weather is nice"
+
+
+tools = [
+    Tool(
+        name="get_weather",
+        description="Get the weather for a given location",
+        input_schema=WeatherInput,
+        execute=WeatherInput.execute,
+    )
+]
+
 g = Agent()
-llm = AnthropicLLM()
+llm = AnthropicLLM(tools=tools)
 manager = ConnectionManager()
 
 
@@ -146,7 +170,17 @@ async def handle_user_message(data: Any, websocket: WebSocket):
                 }
             )
         elif chunk.type == "tool_use":
-            print(chunk)
+            print("tool use", chunk)
+            await websocket.send_json(
+                {
+                    "type": "tool_use",
+                    "id": chunk.content.id,
+                    "tool": chunk.content.name,
+                    "input": chunk.content.input,
+                }
+            )
+        else:
+            print("unknown chunk type", chunk)
 
     g.add_message(complete_response, role="assistant")
     return None
