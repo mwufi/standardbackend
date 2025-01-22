@@ -1,3 +1,3 @@
 
 run:
-	python -m uvicorn app.main:app --reload
+	python -m uvicorn app.server2:app --reload
