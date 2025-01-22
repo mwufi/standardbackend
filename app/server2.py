@@ -132,7 +132,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Register message handlers
 async def handle_user_message(data: Any, websocket: WebSocket):
-    g.add_message(data)
+    if data["isNewConversation"]:
+        g.clear_messages()
+    g.add_message(data["content"])
     complete_response = ""
     async for chunk in llm.stream_chat(g.system_prompt, g.build_messages()):
         if chunk.type == "text":
@@ -174,6 +176,7 @@ async def handle_c(data: Any, websocket: WebSocket):
 
 
 async def handle_set_system_prompt(data: Any, websocket: WebSocket):
+    print("setting system prompt", data)
     g.set_system_prompt(data)
     return None
 

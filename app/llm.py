@@ -53,6 +53,7 @@ class AnthropicLLM:
         Yields:
             Streamed response text chunks
         """
+        print(system_prompt, messages)
 
         def handle_streaming_tool_use(block: ToolUseBlock):
             self.tool_cache.request_execution(block.id, block.name, block.input)
