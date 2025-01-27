@@ -83,9 +83,12 @@ google-auth==2.37.0
     # via google-api-core
     # via google-api-python-client
     # via google-auth-httplib2
+    # via google-genai
     # via google-generativeai
 google-auth-httplib2==0.2.0
     # via google-api-python-client
+google-genai==0.6.0
+    # via standardbackend
 google-generativeai==0.8.3
     # via mainframe-orchestra
 googleapis-common-protos==1.66.0
@@ -148,9 +151,13 @@ lxml==5.3.0
     # via mainframe-orchestra
 mainframe-orchestra==0.0.14
     # via standardbackend
+markdown-it-py==3.0.0
+    # via rich
 matplotlib-inline==0.1.7
     # via ipykernel
     # via ipython
+mdurl==0.1.2
+    # via markdown-it-py
 nest-asyncio==1.6.0
     # via ipykernel
 numpy==2.2.1
@@ -171,6 +178,8 @@ parso==0.8.4
     # via jedi
 pexpect==4.9.0
     # via ipython
+pillow==11.1.0
+    # via google-genai
 pinecone==5.4.2
     # via mainframe-orchestra
 pinecone-plugin-inference==3.1.0
@@ -208,6 +217,7 @@ pydantic==2.10.4
     # via cohere
     # via elevenlabs
     # via fastapi
+    # via google-genai
     # via google-generativeai
     # via groq
     # via mainframe-orchestra
@@ -225,6 +235,7 @@ pygame==2.6.1
     # via standardbackend
 pygments==2.19.1
     # via ipython
+    # via rich
 pyparsing==3.2.1
     # via httplib2
 python-dateutil==2.9.0.post0
@@ -248,8 +259,11 @@ requests==2.32.3
     # via cohere
     # via elevenlabs
     # via google-api-core
+    # via google-genai
     # via huggingface-hub
     # via mainframe-orchestra
+rich==13.9.4
+    # via standardbackend
 rsa==4.9
     # via google-auth
 sentence-splitter==1.4
@@ -328,3 +342,4 @@ wcwidth==0.2.13
     # via prompt-toolkit
 websockets==14.1
     # via elevenlabs
+    # via google-genai
